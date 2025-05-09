@@ -66,22 +66,13 @@ const playerVelocity = new THREE.Vector3();
 const playerDirection = new THREE.Vector3();
 
 let playerOnFloor = false;
-let mouseTime = 0;
 
 const keyStates = {};
-
-const vector1 = new THREE.Vector3();
-const vector2 = new THREE.Vector3();
-const vector3 = new THREE.Vector3();
 
 const listener = new THREE.AudioListener();
 camera.add(listener);
 
-document.addEventListener('keydown', (event) => {
 
-    keyStates[event.code] = true;
-
-});
 
 document.addEventListener('keyup', (event) => {
 
@@ -93,13 +84,10 @@ container.addEventListener('mousedown', () => {
 
     document.body.requestPointerLock();
 
-    mouseTime = performance.now();
+    //mouseTime = performance.now();
 
 });
 
-document.addEventListener('mouseup', () => {
-
-});
 
 document.body.addEventListener('mousemove', (event) => {
 
@@ -122,7 +110,6 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 
 }
-
 
 // Interacción con objeto
 document.addEventListener('keydown', (event) => {
@@ -157,8 +144,8 @@ class ObjetoFisico {
         this.radio = opciones.radio ?? 0.5;
         this.usaGravedad = opciones.usaGravedad ?? false;
         this.friccion = opciones.friccion ?? 0.9;
-        this.limites = opciones.limites ?? null;
-        this.alturaMinima = opciones.alturaMinima ?? 0.25; // Altura mínima para evitar atravesar el suelo
+        //this.limites = opciones.limites ?? null;
+        this.alturaMinima = opciones.alturaMinima ?? 0.5; // Altura mínima para evitar atravesar el suelo
     }
 
     actualizar(deltaTime, otrosObjetos = []) {
@@ -175,11 +162,35 @@ class ObjetoFisico {
 
         this.velocidad.multiplyScalar(this.friccion);
 
-        if (this.limites) {
-            const pos = this.mesh.position;
-            pos.x = THREE.MathUtils.clamp(pos.x, this.limites.min.x, this.limites.max.x);
-            pos.z = THREE.MathUtils.clamp(pos.z, this.limites.min.z, this.limites.max.z);
+
+        for (const otro of otrosObjetos) {
+            if (otro === this) continue;
+
+            const esParedOPiso = otro.esPared || otro.esPiso;
+            if (!esParedOPiso) continue;
+
+            const dir = new THREE.Vector3().subVectors(this.mesh.position, otro.mesh.position);
+            const dist = dir.length();
+            const minDist = this.radio + otro.radio;
+
+            if (dist < minDist) {
+                dir.normalize();
+                const empuje = dir.multiplyScalar(minDist - dist);
+
+                this.mesh.position.add(empuje);
+
+                // Si el otro es piso, y estamos yendo hacia abajo, detén la caída
+                if (otro.esPiso && this.velocidad.y < 0) {
+                    this.velocidad.y = 0;
+                }
+            }
         }
+
+        // if (this.limites) {
+        //     const pos = this.mesh.position;
+        //     pos.x = THREE.MathUtils.clamp(pos.x, this.limites.min.x, this.limites.max.x);
+        //     pos.z = THREE.MathUtils.clamp(pos.z, this.limites.min.z, this.limites.max.z);
+        // }
 
         for (const otro of otrosObjetos) {
             if (otro === this) continue;
@@ -192,14 +203,20 @@ class ObjetoFisico {
                 dir.normalize();
                 const empuje = dir.multiplyScalar((minDist - dist) / 2);
 
+                if (!otro.esPared) {
+                    otro.mesh.position.sub(empuje);
+                }
+
                 this.mesh.position.add(empuje);
-                otro.mesh.position.sub(empuje);
+
 
                 const tmp = this.velocidad.clone();
                 this.velocidad.copy(otro.velocidad);
                 otro.velocidad.copy(tmp);
             }
         }
+        this.mesh.updateMatrixWorld(true);
+
     }
 
     empujar(direccion, fuerza) {
@@ -207,7 +224,7 @@ class ObjetoFisico {
         this.velocidad.add(empuje);
     }
 
-    resolverColisionJugador(playerCollider, playerVelocity) {
+    resolverColisionJugador(playerCollider, playerVelocity, otrosObjetos = []) {
         const distancia = this.mesh.position.distanceTo(playerCollider.end);
         const radioSuma = this.radio + playerCollider.radius;
 
@@ -215,13 +232,43 @@ class ObjetoFisico {
             const direccion = this.mesh.position.clone().sub(playerCollider.end).normalize();
             const penetracion = radioSuma - distancia;
 
-            this.mesh.position.add(direccion.multiplyScalar(penetracion * 0.5));
+            // Solo aplica empuje a objetos que NO son paredes
+            if (!this.esPared) {
+                this.mesh.position.add(direccion.multiplyScalar(penetracion * 0.5));
 
-            if (this.usaGravedad) {
-                this.velocidad.add(direccion.clone().multiplyScalar(playerVelocity.length() * 0.5));
+                if (this.usaGravedad) {
+                    this.velocidad.add(direccion.clone().multiplyScalar(playerVelocity.length() * 0.5));
+                }
+
+                // Verificar colisión contra paredes y piso
+                for (const otro of otrosObjetos) {
+                    if (otro === this) continue;
+
+                    const esParedOPiso = otro.esPared || otro.esPiso;
+                    if (!esParedOPiso) continue;
+
+                    const dir = new THREE.Vector3().subVectors(this.mesh.position, otro.mesh.position);
+                    const dist = dir.length();
+                    const minDist = this.radio + otro.radio;
+
+                    if (dist < minDist) {
+                        dir.normalize();
+                        const empuje = dir.multiplyScalar(minDist - dist);
+
+                        // Reposicionar el objeto empujado
+                        this.mesh.position.add(empuje);
+
+                        // Si es el piso, detener la velocidad vertical
+                        if (otro.esPiso && this.velocidad.y < 0) {
+                            this.velocidad.y = 0;
+                        }
+                    }
+                }
             }
         }
     }
+
+
 }
 
 
@@ -303,7 +350,7 @@ function getSideVector() {
 function controls(deltaTime) {
 
     // gives a bit of air control
-    const speedDelta = deltaTime * (playerOnFloor ? 25 : 8);
+    const speedDelta = deltaTime * (playerOnFloor ? 10 : 4);
 
     if (keyStates['KeyW']) {
 
@@ -333,7 +380,7 @@ function controls(deltaTime) {
 
         if (keyStates['Space']) {
 
-            playerVelocity.y = 15;
+            playerVelocity.y = 8;
 
         }
 
@@ -364,16 +411,24 @@ let gltfModel;
 let guitarObject, drumObject, pianoObject; // 👈 Declara estas variables en el contexto global
 
 
-loader.load('Store_.glb', (gltf) => {
+loader.load('Store_02.glb', (gltf) => {
 
     gltfModel = gltf;
 
     scene.add(gltf.scene);
 
+    // Almacenar los objetos que deben ser extraídos
+    // Almacenar los objetos que deben ser extraídos
+    const objetosDinamicos = [];
+
     gltf.scene.traverse(child => {
         if (child.isMesh && child.geometry && child.geometry.attributes && child.geometry.attributes.position) {
             child.castShadow = true;
             child.receiveShadow = true;
+
+            const geometry = child.geometry;
+            const name = child.name || 'Unnamed';
+            //console.log(`Mesh: ${name}, Vertices: ${geometry.attributes.position.count}`);
 
             if (child.material.map) {
                 child.material.map.anisotropy = 4;
@@ -385,19 +440,38 @@ loader.load('Store_.glb', (gltf) => {
                 agregarLuzALampara(child);
             }
 
-            if (nombre.includes("table") || nombre.includes("guardaropa") || nombre.includes("chair")
-                || nombre.includes("drum") || nombre.includes("piano") || nombre.includes("guitar")
-                || nombre.includes("hat")) {
-                const obj = new ObjetoFisico(child, {
-                    radio: 0.8,
-                    usaGravedad: false,
-                    limites: limitesTienda
-                });
-
-                objetosFisicos.push(obj);
+            // Guardar objetos que serán movidos al final
+            if (nombre.includes("table") || nombre.includes("guardaropa") || nombre.includes("chair") ||
+                nombre.includes("drum") || nombre.includes("piano") || nombre.includes("guitar") ||
+                nombre.includes("hat")) {
+                objetosDinamicos.push(child);
             }
 
-            // Asignar referencias a instrumentos
+            // Piso
+            if (nombre.includes("floor")) {
+                //console.log("Piso detectado:", nombre);
+                const piso = new ObjetoFisico(child, {
+                    usaGravedad: false,
+                    friccion: 1,
+                    radio: 100
+                });
+                piso.esPiso = true;
+                objetosFisicos.push(piso);
+            }
+
+            // Paredes
+            if (nombre.includes("wall")) {
+                //console.log("Pared detectada:", nombre);
+                const pared = new ObjetoFisico(child, {
+                    usaGravedad: false,
+                    friccion: 1,
+                    radio: 1
+                });
+                pared.esPared = true;
+                objetosFisicos.push(pared);
+            }
+
+            // Referencias a instrumentos
             if (nombre.includes("guitar")) {
                 guitarObject = child;
             } else if (nombre.includes("drum")) {
@@ -408,7 +482,19 @@ loader.load('Store_.glb', (gltf) => {
         }
     });
 
+    // ⬇️ Ya terminó el traverse, ahora movemos los dinámicos
+    objetosDinamicos.forEach(child => {
+        scene.attach(child);
+        const obj = new ObjetoFisico(child, {
+            radio: 0.8,
+            usaGravedad: false,
+        });
+        objetosFisicos.push(obj);
+    });
+    
     // ⬇️ Mueve esta línea aquí, después del traverse
+    gltf.scene.updateMatrixWorld(true);
+
     worldOctree.fromGraphNode(gltf.scene);
 
     for (let i = 0; i < 30; i++) {
@@ -425,6 +511,7 @@ loader.load('Store_.glb', (gltf) => {
             helper.visible = value;
         });
 });
+
 
 
 // Crear geometría para las gotas de lluvia
@@ -494,7 +581,7 @@ function crearObjetoAleatorio(tipo = 'cubo') {
     const obj = new ObjetoFisico(mesh, {
         radio: tipo === 'cubo' ? 0.35 : 0.25,
         usaGravedad: true,
-        limites: limitesTienda
+        //limites: limitesTienda
     });
 
     objetosFisicos.push(obj);
@@ -513,8 +600,8 @@ function animate() {
         teleportPlayerIfOob();
 
         for (let obj of objetosFisicos) {
-            obj.actualizar(deltaTime);
-            obj.resolverColisionJugador(playerCollider, playerVelocity);
+            obj.actualizar(deltaTime,);
+            obj.resolverColisionJugador(playerCollider, playerVelocity, objetosFisicos);
 
             const nombre = obj.mesh.name.toLowerCase();
             if (nombre.includes("piano") || nombre.includes("guitar") || nombre.includes("drum")) {
@@ -550,7 +637,12 @@ function animate() {
 function iniciarMinijuego(instrumento) {
     const contenedor = document.getElementById('minijuego-container');
     const canvas = document.getElementById('minijuego');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas?.getContext('2d');
+
+    if (!canvas || !ctx) {
+        console.warn("Canvas o contexto 2D no disponibles");
+        return;
+    }
 
     // Crear audio posicional
     const sonido = new THREE.PositionalAudio(listener);
@@ -562,16 +654,19 @@ function iniciarMinijuego(instrumento) {
         sonido.setLoop(true);
         sonido.play();
 
-        // Asociar el sonido al objeto 3D correcto
-        if (instrumento === 'guitar') {
-            guitarObject.add(sonido);
-        } else if (instrumento === 'drum') {
-            drumObject.add(sonido);
-        } else if (instrumento === 'piano') {
-            pianoObject.add(sonido);
-        }
-    });
+        const instrumentoMap = {
+            guitar: guitarObject,
+            drum: drumObject,
+            piano: pianoObject
+        };
 
+        const objetoInstrumento = instrumentoMap[instrumento];
+        if (objetoInstrumento) {
+            objetoInstrumento.add(sonido);
+        }
+    }, undefined, (err) => {
+        console.error("Error cargando audio del instrumento", err);
+    });
 
     contenedor.style.display = 'block';
 
@@ -586,13 +681,13 @@ function iniciarMinijuego(instrumento) {
 
     for (let i = 0; i < totalTeclas; i++) {
         const letra = teclasPosibles[Math.floor(Math.random() * teclasPosibles.length)];
-        teclas.push({ letra, x: -i * 100, estado: 'pendiente', contador: 0 });
+        teclas.push({ letra, x: -i * 150, estado: 'pendiente', contador: 0 }); // Espaciado aumentado
     }
 
     let animando = true;
 
     function dibujarZona() {
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)'; // 🔴 Cambiado a rojo
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
         ctx.fillRect(zonaX, 0, zonaWidth, canvas.height);
     }
 
@@ -604,20 +699,16 @@ function iniciarMinijuego(instrumento) {
         teclas.forEach((t) => {
             if (t.estado === 'oculta') return;
 
-            // Color según estado
-            if (t.estado === 'correcta') ctx.fillStyle = 'lime';
-            else if (t.estado === 'incorrecta') ctx.fillStyle = 'red';
-            else ctx.fillStyle = 'white';
+            ctx.fillStyle = t.estado === 'correcta' ? 'lime' :
+                t.estado === 'incorrecta' ? 'red' : 'white';
 
             ctx.fillText(t.letra.toUpperCase(), t.x + 25, canvas.height / 2);
             t.x += velocidad;
 
-            // Si entra a la zona roja sin haber sido presionada
             if (t.estado === 'pendiente' && t.x >= zonaX) {
                 t.estado = 'incorrecta';
             }
 
-            // Ocultar después de un tiempo
             if ((t.estado === 'correcta' || t.estado === 'incorrecta') && t.contador++ > 20) {
                 t.estado = 'oculta';
             }
@@ -636,6 +727,7 @@ function iniciarMinijuego(instrumento) {
         const teclasVisibles = teclas.filter(t => t.estado !== 'oculta');
         if (teclasVisibles.length === 0) {
             animando = false;
+            window.removeEventListener('keydown', manejarTecla);
             mostrarPuntuacion();
             return;
         }
@@ -652,9 +744,7 @@ function iniciarMinijuego(instrumento) {
         ctx.fillText(`Puntuación: ${teclasPresionadas}/${totalTeclas}`, canvas.width / 2, canvas.height / 2);
 
         setTimeout(() => {
-            //audio.pause();
-            //audio.currentTime = 0;
-            sonido.stop();
+            sonido.stop(); // detener audio correctamente
             contenedor.style.display = 'none';
 
             if (teclasPresionadas >= 11) {
@@ -663,33 +753,36 @@ function iniciarMinijuego(instrumento) {
         }, 3000);
     }
 
-    window.addEventListener('keydown', (e) => {
-        if (!animando) return;
+    function manejarTecla(e) {
+        if (!animando) {
+            window.removeEventListener('keydown', manejarTecla);
+            return;
+        }
 
         if (e.code === 'Escape') {
             animando = false;
+            sonido.stop();
             contenedor.style.display = 'none';
+            window.removeEventListener('keydown', manejarTecla);
             return;
         }
 
         const teclaPresionada = e.key.toLowerCase();
-
-        // Buscar la primera tecla pendiente
         const proximaTecla = teclas.find(t => t.estado === 'pendiente');
         if (!proximaTecla) return;
 
-        // Validar si se presionó correctamente
         if (teclaPresionada === proximaTecla.letra) {
             proximaTecla.estado = 'correcta';
             teclasPresionadas++;
         } else {
             proximaTecla.estado = 'incorrecta';
         }
-    });
+    }
 
-
+    window.addEventListener('keydown', manejarTecla);
     loop();
 }
+
 
 
 let instrumentosDesactivados = 0;
@@ -727,7 +820,8 @@ function desactivarInstrumento(nombreInstrumento) {
 }
 
 function desactivarPuerta(gltf) {
-    const puerta = gltf.scene.getObjectByName("Cube006");
+    const puerta = gltf.scene.getObjectByName("door");
+
 
     if (puerta) {
         // Opción 1: Ocultarla visualmente
@@ -738,12 +832,24 @@ function desactivarPuerta(gltf) {
 
         mostrarMensajeEscape();
     } else {
-        console.warn("No se encontró la puerta (Cube.006) en la escena");
+        console.warn("No se encontró la puerta (door) en la escena");
+    }
+}
+
+function reiniciarPagina(e) {
+    console.log(e.key); // Verificar si la tecla "r" está siendo detectada
+    
+    if (e.key.toLowerCase() === "r") {
+        //window.removeEventListener("keydown", reiniciarPagina);
+        window.location.reload();
     }
 }
 
 function mostrarMensajeEscape() {
+    if (document.getElementById("mensaje-escape")) return;
+
     const mensajeDiv = document.createElement("div");
+    mensajeDiv.id = "mensaje-escape";
     mensajeDiv.style.position = "fixed";
     mensajeDiv.style.top = "50%";
     mensajeDiv.style.left = "50%";
@@ -764,10 +870,6 @@ function mostrarMensajeEscape() {
     }, 3000);
 }
 
-function reiniciarPagina(e) {
-    if (e.key.toLowerCase() === "r") {
-        window.removeEventListener("keydown", reiniciarPagina);
-        window.location.reload();
-    }
-}
+
+
 
