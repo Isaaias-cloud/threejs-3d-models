@@ -298,6 +298,8 @@ function getSideVector() {
 }
 
 let botonAPresionado = false;
+let lastTurnTime = 0;
+const turnCooldown = 0.3; // segundos entre cada giro
 
 function detectarBotonA() {
     const session = renderer.xr.getSession();
@@ -340,11 +342,14 @@ function controls(deltaTime) {
     const session = renderer.xr.getSession();
     if (!session) return;
 
-    for (const source of session.inputSources) {
-        if (source.handedness === 'left' && source.gamepad) {
-            const axes = source.gamepad.axes;
+    const currentTime = clock.getElapsedTime(); // tiempo actual
 
-            // axes[2] = x (izquierda-derecha), axes[3] = y (adelante-atrás)
+    for (const source of session.inputSources) {
+        if (!source.gamepad || !source.handedness) continue;
+
+        const axes = source.gamepad.axes;
+
+        if (source.handedness === 'left') {
             const xAxis = axes[2] || 0;
             const yAxis = axes[3] || 0;
 
@@ -358,8 +363,26 @@ function controls(deltaTime) {
                 playerVelocity.add(forwardVector.multiplyScalar(-speedDelta * yAxis));
             }
         }
+
+        // 🎮 ROTACIÓN con joystick derecho
+        if (source.handedness === 'right') {
+            const xAxis = axes[2] || 0; // izquierda (-1) / derecha (+1)
+
+            // Aplica rotación solo si hay inclinación suficiente y no ha pasado el cooldown
+            if (Math.abs(xAxis) > 0.6 && currentTime - lastTurnTime > turnCooldown) {
+                const angle = xAxis > 0 ? -Math.PI / 6 : Math.PI / 6; // giro 30 grados
+                const quaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+
+                playerCollider.start.applyQuaternion(quaternion);
+                playerCollider.end.applyQuaternion(quaternion);
+                playerVelocity.applyQuaternion(quaternion);
+
+                lastTurnTime = currentTime;
+            }
+        }
     }
 }
+
 
 
 const loader = new GLTFLoader().setPath('../models/gltf/');
