@@ -52,11 +52,11 @@ container.appendChild(renderer.domElement);
 // Agrega el botón VR
 document.body.appendChild(VRButton.createButton(renderer));
 
-const stats = new Stats();
+/*const stats = new Stats();
 stats.domElement.style.position = 'absolute';
 stats.domElement.style.top = '0px';
 container.appendChild(stats.domElement);
-
+*/
 const GRAVITY = 30;
 const STEPS_PER_FRAME = 5;
 const clock = new THREE.Clock();
@@ -479,11 +479,11 @@ loader.load('Store_02.glb', (gltf) => {
     helper.visible = false;
     scene.add(helper);
 
-    const gui = new GUI({ width: 200 });
+    /*const gui = new GUI({ width: 200 });
     gui.add({ debug: false }, 'debug')
         .onChange(function (value) {
             helper.visible = value;
-        });
+        });*/
 });
 
 
@@ -614,7 +614,7 @@ function animate() {
     detectarBotonA(); // 👈 AÑADIDO AQUÍ
 
     renderer.render(scene, camera);
-    stats.update();
+    //stats.update();
 }
 
 
