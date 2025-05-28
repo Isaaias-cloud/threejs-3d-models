@@ -52,10 +52,10 @@ container.appendChild(renderer.domElement);
 // Agrega el botón VR
 document.body.appendChild(VRButton.createButton(renderer));
 
-//const stats = new Stats();
-//stats.domElement.style.position = 'absolute';
-//stats.domElement.style.top = '0px';
-//container.appendChild(stats.domElement);
+const stats = new Stats();
+stats.domElement.style.position = 'absolute';
+stats.domElement.style.top = '0px';
+container.appendChild(stats.domElement);
 
 const GRAVITY = 30;
 const STEPS_PER_FRAME = 5;
