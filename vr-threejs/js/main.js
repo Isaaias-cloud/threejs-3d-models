@@ -1,24 +1,19 @@
 
 import * as THREE from 'three';
-//import Stats from 'three/addons/libs/stats.module.js';
+import Stats from 'three/addons/libs/stats.module.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Octree } from 'three/addons/math/Octree.js';
 import { OctreeHelper } from 'three/addons/helpers/OctreeHelper.js';
 import { Capsule } from 'three/addons/math/Capsule.js';
-//import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
-import { VRButton } from 'three/addons/webxr/VRButton.js';
-import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
-import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x88ccee);
 scene.fog = new THREE.Fog(0x88ccee, 0, 10);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
-const player = new THREE.Group();
-player.add(camera);
-scene.add(player);
-//camera.rotation.order = 'YXZ';
+camera.rotation.order = 'YXZ';
 
 const fillLight1 = new THREE.HemisphereLight(0x8dc1de, 0x00668d, 1.5);
 fillLight1.position.set(2, 1, 1);
@@ -45,36 +40,65 @@ const container = document.getElementById('container');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.xr.enabled = true; // <-- Activar VR
 renderer.setAnimationLoop(animate);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 container.appendChild(renderer.domElement);
 
-// Agrega el botón VR
-document.body.appendChild(VRButton.createButton(renderer));
-
-/*const stats = new Stats();
+const stats = new Stats();
 stats.domElement.style.position = 'absolute';
 stats.domElement.style.top = '0px';
 container.appendChild(stats.domElement);
-*/
+
 const GRAVITY = 30;
+
 const STEPS_PER_FRAME = 5;
+
 const clock = new THREE.Clock();
 
 
 const worldOctree = new Octree();
+
 const playerCollider = new Capsule(new THREE.Vector3(0, 0.35, 0), new THREE.Vector3(0, 1, 0), 0.35);
+
 const playerVelocity = new THREE.Vector3();
 const playerDirection = new THREE.Vector3();
+
 let playerOnFloor = false;
+
 const keyStates = {};
 
 const listener = new THREE.AudioListener();
 camera.add(listener);
 
+
+
+document.addEventListener('keyup', (event) => {
+
+    keyStates[event.code] = false;
+
+});
+
+container.addEventListener('mousedown', () => {
+
+    document.body.requestPointerLock();
+
+    //mouseTime = performance.now();
+
+});
+
+
+document.body.addEventListener('mousemove', (event) => {
+
+    if (document.pointerLockElement === document.body) {
+
+        camera.rotation.y -= event.movementX / 500;
+        camera.rotation.x -= event.movementY / 500;
+
+    }
+
+});
 
 window.addEventListener('resize', onWindowResize);
 
@@ -88,7 +112,27 @@ function onWindowResize() {
 }
 
 // Interacción con objeto
+document.addEventListener('keydown', (event) => {
+    keyStates[event.code] = true;
 
+    if (event.code === 'KeyE' && objetoInteractivoCercano) {
+        const nombre = objetoInteractivoCercano.mesh.name.toLowerCase();
+
+        if (objetoInteractivoCercano.interactivo === false) return; // Instrumento desactivado
+
+        if (nombre.includes("guitar")) {
+            iniciarMinijuego("guitar");
+        } else if (nombre.includes("drum")) {
+            iniciarMinijuego("drum");
+        } else if (nombre.includes("piano")) {
+            iniciarMinijuego("piano");
+        } else {
+            iniciarMinijuego(); // Por defecto
+        }
+    }
+
+
+});
 
 
 
@@ -277,126 +321,72 @@ function updatePlayer(deltaTime) {
 
     camera.position.copy(playerCollider.end);
 
-    player.position.copy(playerCollider.end);
 
 
 }
 
 
 function getForwardVector() {
-    const direction = new THREE.Vector3();
-    camera.getWorldDirection(direction);
-    direction.y = 0; // evitar moverse verticalmente
-    direction.normalize();
-    return direction;
+
+    camera.getWorldDirection(playerDirection);
+    playerDirection.y = 0;
+    playerDirection.normalize();
+
+    return playerDirection;
+
 }
 
 function getSideVector() {
-    const direction = new THREE.Vector3();
-    camera.getWorldDirection(direction);
-    direction.y = 0;
-    direction.normalize();
-    direction.cross(camera.up);
-    return direction;
+
+    camera.getWorldDirection(playerDirection);
+    playerDirection.y = 0;
+    playerDirection.normalize();
+    playerDirection.cross(camera.up);
+
+    return playerDirection;
+
 }
-
-let botonAPresionado = false;
-let lastTurnTime = 0;
-const turnCooldown = 0.3; // segundos entre cada giro
-
-function detectarBotonA() {
-    const session = renderer.xr.getSession();
-    if (!session) return;
-
-    for (const source of session.inputSources) {
-        if (source.handedness === 'right' && source.gamepad && source.gamepad.buttons.length > 0) {
-            const botonA = source.gamepad.buttons[0];
-
-            if (botonA.pressed && !botonAPresionado) {
-                botonAPresionado = true;
-
-                if (objetoInteractivoCercano) {
-                    const nombre = objetoInteractivoCercano.mesh.name.toLowerCase();
-
-                    if (objetoInteractivoCercano.interactivo === false) return;
-
-                    if (nombre.includes("guitar")) {
-                        iniciarMinijuego("guitar");
-                    } else if (nombre.includes("drum")) {
-                        iniciarMinijuego("drum");
-                    } else if (nombre.includes("piano")) {
-                        iniciarMinijuego("piano");
-                    } else {
-                        iniciarMinijuego(); // Por defecto
-                    }
-                }
-
-            } else if (!botonA.pressed) {
-                botonAPresionado = false;
-            }
-        }
-    }
-}
-
 
 function controls(deltaTime) {
+
+    // gives a bit of air control
     const speedDelta = deltaTime * (playerOnFloor ? 10 : 4);
 
-    const session = renderer.xr.getSession();
-    if (!session) return;
+    if (keyStates['KeyW']) {
 
-    const currentTime = clock.getElapsedTime(); // tiempo actual
+        //playerVelocity.add(getForwardVector().multiplyScalar(speedDelta));
 
-    for (const source of session.inputSources) {
+    }
 
-        if (!source.gamepad || !source.handedness) continue;
+    if (keyStates['KeyS']) {
 
-        const axes = source.gamepad.axes;
+        playerVelocity.add(getForwardVector().multiplyScalar(- speedDelta));
 
-        if (source.handedness === 'left') {
-            const xAxis = axes[2] || 0;
-            const yAxis = axes[3] || 0;
+    }
 
-            if (Math.abs(xAxis) > 0.1) {
-                const sideVector = getSideVector();
-                playerVelocity.add(sideVector.multiplyScalar(speedDelta * xAxis));
-                console.log(source.handedness, 'axes:', axes);
-                console.log('playerVelocity:', playerVelocity);
+    if (keyStates['KeyA']) {
 
+        playerVelocity.add(getSideVector().multiplyScalar(- speedDelta));
 
-            }
+    }
 
-            if (Math.abs(yAxis) > 0.1) {
-                const forwardVector = getForwardVector();
-                playerVelocity.add(forwardVector.multiplyScalar(-speedDelta * yAxis));
-                console.log('playerVelocity:', playerVelocity);
+    if (keyStates['KeyD']) {
 
-            }
-            
-        }
+        playerVelocity.add(getSideVector().multiplyScalar(speedDelta));
 
-        if (source.handedness === 'right') {
-            const xAxis = axes[2] || 0; // izquierda (-1) / derecha (+1)
+    }
 
-            if (Math.abs(xAxis) > 0.6 && currentTime - lastTurnTime > turnCooldown) {
-                const angle = xAxis > 0 ? -Math.PI / 6 : Math.PI / 6; // giro 30 grados
+    if (playerOnFloor) {
 
-                // Crear quaternion para rotar alrededor del eje Y
-                const quaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+        if (keyStates['Space']) {
 
-                // Rotar el grupo del jugador
-                player.quaternion.premultiply(quaternion);
+            playerVelocity.y = 8;
 
-                // Actualizar cooldown
-                lastTurnTime = currentTime;
-            }
         }
 
     }
-    
+
 }
-
-
 
 const loader = new GLTFLoader().setPath('../models/gltf/');
 //Objetos
@@ -501,7 +491,7 @@ loader.load('Store_02.glb', (gltf) => {
         });
         objetosFisicos.push(obj);
     });
-
+    
     // ⬇️ Mueve esta línea aquí, después del traverse
     gltf.scene.updateMatrixWorld(true);
 
@@ -515,11 +505,11 @@ loader.load('Store_02.glb', (gltf) => {
     helper.visible = false;
     scene.add(helper);
 
-    /*const gui = new GUI({ width: 200 });
+    const gui = new GUI({ width: 200 });
     gui.add({ debug: false }, 'debug')
         .onChange(function (value) {
             helper.visible = value;
-        });*/
+        });
 });
 
 
@@ -624,15 +614,7 @@ function animate() {
     }
 
     const prompt = document.getElementById('interactPrompt');
-    if (objetoInteractivoCercano) {
-        const nombre = objetoInteractivoCercano.mesh.name.toLowerCase();
-        if (nombre.includes("guitar") || nombre.includes("piano") || nombre.includes("drum")) {
-            prompt.innerText = 'Pulsa A para tocar';
-            prompt.style.display = 'block';
-        }
-    } else {
-        prompt.style.display = 'none';
-    }
+    prompt.style.display = objetoInteractivoCercano ? 'block' : 'none';
 
 
     const posicionesLluvia = lluvia.geometry.attributes.position.array;
@@ -646,24 +628,21 @@ function animate() {
     }
     lluvia.geometry.attributes.position.needsUpdate = true;
 
-
-    detectarBotonA(); // 👈 AÑADIDO AQUÍ
-
     renderer.render(scene, camera);
-    //stats.update();
+    stats.update();
 }
 
 
 
 function iniciarMinijuego(instrumento) {
-    const instrumentoMap = {
-        guitar: guitarObject,
-        drum: drumObject,
-        piano: pianoObject
-    };
+    const contenedor = document.getElementById('minijuego-container');
+    const canvas = document.getElementById('minijuego');
+    const ctx = canvas?.getContext('2d');
 
-    const objetoInstrumento = instrumentoMap[instrumento];
-    if (!objetoInstrumento) return;
+    if (!canvas || !ctx) {
+        console.warn("Canvas o contexto 2D no disponibles");
+        return;
+    }
 
     // Crear audio posicional
     const sonido = new THREE.PositionalAudio(listener);
@@ -674,54 +653,134 @@ function iniciarMinijuego(instrumento) {
         sonido.setRefDistance(5);
         sonido.setLoop(true);
         sonido.play();
-        objetoInstrumento.add(sonido);
+
+        const instrumentoMap = {
+            guitar: guitarObject,
+            drum: drumObject,
+            piano: pianoObject
+        };
+
+        const objetoInstrumento = instrumentoMap[instrumento];
+        if (objetoInstrumento) {
+            objetoInstrumento.add(sonido);
+        }
+    }, undefined, (err) => {
+        console.error("Error cargando audio del instrumento", err);
     });
 
-    // Mini lógica: tocar 5 veces con botón A para completar
-    let interacciones = 0;
-    const meta = 5;
+    contenedor.style.display = 'block';
 
-    const prompt = document.getElementById('interactPrompt');
-    prompt.innerText = `Toca el ${instrumento.toUpperCase()} (${interacciones}/${meta})`;
+    const teclasPosibles = ['p', 'o', 'i', 'u'];
+    const totalTeclas = 20;
+    const velocidad = 3;
+    const teclas = [];
 
-    const intervalo = setInterval(() => {
-        // Cuando se alcance la meta, finalizar
-        if (interacciones >= meta) {
-            sonido.stop();
-            clearInterval(intervalo);
-            prompt.innerText = '';
-            desactivarInstrumento(instrumento);
-        }
-    }, 500);
+    const zonaX = canvas.width - 100;
+    const zonaWidth = 80;
+    let teclasPresionadas = 0;
 
-    // Escucha botón A para contar interacciones
-    const session = renderer.xr.getSession();
-    if (!session) return;
-
-    function contarInteraccion() {
-        interacciones++;
-        prompt.innerText = `Toca el ${instrumento.toUpperCase()} (${interacciones}/${meta})`;
+    for (let i = 0; i < totalTeclas; i++) {
+        const letra = teclasPosibles[Math.floor(Math.random() * teclasPosibles.length)];
+        teclas.push({ letra, x: -i * 150, estado: 'pendiente', contador: 0 }); // Espaciado aumentado
     }
 
-    function loopBotonA() {
-        for (const source of session.inputSources) {
-            if (source.handedness === 'right' && source.gamepad) {
-                const botonA = source.gamepad.buttons[0];
-                if (botonA.pressed && !botonAPresionado) {
-                    botonAPresionado = true;
-                    contarInteraccion();
-                } else if (!botonA.pressed) {
-                    botonAPresionado = false;
-                }
+    let animando = true;
+
+    function dibujarZona() {
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+        ctx.fillRect(zonaX, 0, zonaWidth, canvas.height);
+    }
+
+    function dibujarTeclas() {
+        ctx.font = '30px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        teclas.forEach((t) => {
+            if (t.estado === 'oculta') return;
+
+            ctx.fillStyle = t.estado === 'correcta' ? 'lime' :
+                t.estado === 'incorrecta' ? 'red' : 'white';
+
+            ctx.fillText(t.letra.toUpperCase(), t.x + 25, canvas.height / 2);
+            t.x += velocidad;
+
+            if (t.estado === 'pendiente' && t.x >= zonaX) {
+                t.estado = 'incorrecta';
             }
+
+            if ((t.estado === 'correcta' || t.estado === 'incorrecta') && t.contador++ > 20) {
+                t.estado = 'oculta';
+            }
+        });
+    }
+
+    function loop() {
+        if (!animando) return;
+
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        dibujarZona();
+        dibujarTeclas();
+
+        const teclasVisibles = teclas.filter(t => t.estado !== 'oculta');
+        if (teclasVisibles.length === 0) {
+            animando = false;
+            window.removeEventListener('keydown', manejarTecla);
+            mostrarPuntuacion();
+            return;
         }
 
-        if (interacciones < meta) {
-            requestAnimationFrame(loopBotonA);
+        requestAnimationFrame(loop);
+    }
+
+    function mostrarPuntuacion() {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = '40px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Puntuación: ${teclasPresionadas}/${totalTeclas}`, canvas.width / 2, canvas.height / 2);
+
+        setTimeout(() => {
+            sonido.stop(); // detener audio correctamente
+            contenedor.style.display = 'none';
+
+            if (teclasPresionadas >= 11) {
+                desactivarInstrumento(instrumento);
+            }
+        }, 3000);
+    }
+
+    function manejarTecla(e) {
+        if (!animando) {
+            window.removeEventListener('keydown', manejarTecla);
+            return;
+        }
+
+        if (e.code === 'Escape') {
+            animando = false;
+            sonido.stop();
+            contenedor.style.display = 'none';
+            window.removeEventListener('keydown', manejarTecla);
+            return;
+        }
+
+        const teclaPresionada = e.key.toLowerCase();
+        const proximaTecla = teclas.find(t => t.estado === 'pendiente');
+        if (!proximaTecla) return;
+
+        if (teclaPresionada === proximaTecla.letra) {
+            proximaTecla.estado = 'correcta';
+            teclasPresionadas++;
+        } else {
+            proximaTecla.estado = 'incorrecta';
         }
     }
 
-    loopBotonA();
+    window.addEventListener('keydown', manejarTecla);
+    loop();
 }
 
 
@@ -779,7 +838,7 @@ function desactivarPuerta(gltf) {
 
 function reiniciarPagina(e) {
     console.log(e.key); // Verificar si la tecla "r" está siendo detectada
-
+    
     if (e.key.toLowerCase() === "r") {
         //window.removeEventListener("keydown", reiniciarPagina);
         window.location.reload();
@@ -810,6 +869,7 @@ function mostrarMensajeEscape() {
         window.addEventListener("keydown", reiniciarPagina);
     }, 3000);
 }
+
 
 
 

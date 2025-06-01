@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+	<head>
+		<title>three.js - misc - octree collisions</title>
+		<meta charset=utf-8 />
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link type="text/css" rel="stylesheet" href="./css/styles.css">
+	</head>
+	<body>
+		<div id="info">
+			Interactúa con los instrumentos para escapar<br/>
+		</div>
+		<div id="container"></div>
+		
+		<div id="interactPrompt" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+		background: rgba(0,0,0,0.7); color: white; padding: 10px 20px; border-radius: 10px; display: none; font-family: sans-serif;">
+			Presiona E para interactuar
+		</div>
+
+
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "../build/three.module.js",
+					"three/addons/": "../jsm/"
+				}
+			}
+		</script>
+
+		<!-- En tu HTML, fuera del entorno Three.js -->
+		<div id="minijuego-container">
+			<canvas id="minijuego" width="800" height="300"></canvas>
+		</div>
+		<script type="module" src="./js/main.js"></script>
+	</body>
+</html>
