@@ -55,6 +55,9 @@ container.appendChild(renderer.domElement);
 // Agrega el botón VR
 document.body.appendChild(VRButton.createButton(renderer));
 
+let mensajeSprite = null;
+let ultimoObjetoMostrado = null;
+
 /*const stats = new Stats();
 stats.domElement.style.position = 'absolute';
 stats.domElement.style.top = '0px';
@@ -300,7 +303,11 @@ function getSideVector() {
     return direction;
 }
 
-let botonAPresionado = false;
+let botonAPresionadoGlobal = false; // para detectar inicio
+//let botonAPresionadoMinijuego = false; // para contar toques
+
+let minijuegoActivo = false;
+
 let lastTurnTime = 0;
 const turnCooldown = 0.3; // segundos entre cada giro
 
@@ -312,10 +319,10 @@ function detectarBotonA() {
         if (source.handedness === 'right' && source.gamepad && source.gamepad.buttons.length > 0) {
             const botonA = source.gamepad.buttons[0];
 
-            if (botonA.pressed && !botonAPresionado) {
-                botonAPresionado = true;
+            if (botonA.pressed && !botonAPresionadoGlobal) {
+                botonAPresionadoGlobal = true;
 
-                if (objetoInteractivoCercano) {
+                if (objetoInteractivoCercano && !minijuegoActivo) {  // ← ✅ aquí evitamos múltiples inicios
                     const nombre = objetoInteractivoCercano.mesh.name.toLowerCase();
 
                     if (objetoInteractivoCercano.interactivo === false) return;
@@ -329,14 +336,17 @@ function detectarBotonA() {
                     } else {
                         iniciarMinijuego(); // Por defecto
                     }
+
+                    minijuegoActivo = true; // ✅ Marcamos que el minijuego está en curso
                 }
 
             } else if (!botonA.pressed) {
-                botonAPresionado = false;
+                botonAPresionadoGlobal = false;
             }
         }
     }
 }
+
 
 
 function controls(deltaTime) {
@@ -360,8 +370,8 @@ function controls(deltaTime) {
             if (Math.abs(xAxis) > 0.1) {
                 const sideVector = getSideVector();
                 playerVelocity.add(sideVector.multiplyScalar(speedDelta * xAxis));
-                console.log(source.handedness, 'axes:', axes);
-                console.log('playerVelocity:', playerVelocity);
+                //console.log(source.handedness, 'axes:', axes);
+                //console.log('playerVelocity:', playerVelocity);
 
 
             }
@@ -369,7 +379,7 @@ function controls(deltaTime) {
             if (Math.abs(yAxis) > 0.1) {
                 const forwardVector = getForwardVector();
                 playerVelocity.add(forwardVector.multiplyScalar(-speedDelta * yAxis));
-                console.log('playerVelocity:', playerVelocity);
+                //console.log('playerVelocity:', playerVelocity);
 
             }
             
@@ -615,24 +625,36 @@ function animate() {
 
             const nombre = obj.mesh.name.toLowerCase();
             if (nombre.includes("piano") || nombre.includes("guitar") || nombre.includes("drum")) {
-                const distancia = obj.mesh.position.distanceTo(playerCollider.end);
+                const distancia = obj.mesh.position.distanceTo(player.position);
                 if (distancia < 2.5) {
+                    //console.log('Objeto cercano:', obj.mesh.name, 'distancia:', distancia.toFixed(2));
                     objetoInteractivoCercano = obj;
                 }
             }
         }
     }
 
-    const prompt = document.getElementById('interactPrompt');
-    if (objetoInteractivoCercano) {
-        const nombre = objetoInteractivoCercano.mesh.name.toLowerCase();
-        if (nombre.includes("guitar") || nombre.includes("piano") || nombre.includes("drum")) {
-            prompt.innerText = 'Pulsa A para tocar';
-            prompt.style.display = 'block';
+    // Mostrar mensaje flotante 3D al acercarse
+    if (objetoInteractivoCercano !== ultimoObjetoMostrado) {
+        // Quitar sprite anterior
+        if (mensajeSprite && ultimoObjetoMostrado) {
+            ultimoObjetoMostrado.mesh.remove(mensajeSprite);
+            mensajeSprite = null;
         }
-    } else {
-        prompt.style.display = 'none';
+
+        ultimoObjetoMostrado = objetoInteractivoCercano;
+
+        // Mostrar nuevo sprite
+        if (objetoInteractivoCercano && objetoInteractivoCercano.interactivo !== false) {
+            mensajeSprite = crearTextoFlotante('Pulsa el gatillo para tocar', objetoInteractivoCercano.mesh);
+        }
     }
+
+    // Hacer que el sprite mire hacia la cámara
+    if (mensajeSprite) {
+        mensajeSprite.lookAt(camera.position);
+    }
+
 
 
     const posicionesLluvia = lluvia.geometry.attributes.position.array;
@@ -652,10 +674,34 @@ function animate() {
     renderer.render(scene, camera);
     //stats.update();
 }
+  // Mini lógica: tocar 5 veces con botón A para completar
+    let interacciones = 0;
+    const meta = 5;
+    function contarInteraccion() {
+        interacciones++;
 
-
+        // Actualizar el texto del sprite
+        const canvas = textoSprite.material.map.image;
+        const context = canvas.getContext('2d');
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = 'white';
+        context.font = 'bold 40px sans-serif';
+        context.textAlign = 'center';
+        context.fillText(`Toca el ${instrumento.toUpperCase()} (${interacciones}/${meta})`, canvas.width / 2, canvas.height / 2);
+        textoSprite.material.map.needsUpdate = true;
+    }
+    if (interacciones >= meta) {
+        sonido.stop();
+        clearInterval(intervalo);
+        objetoInstrumento.remove(textoSprite); // ⬅️ eliminar
+        desactivarInstrumento(instrumento);
+    }
 
 function iniciarMinijuego(instrumento) {
+    // Crear texto flotante encima del instrumento
+    let botonAPresionadoMinijuego = false;
+
+    
     const instrumentoMap = {
         guitar: guitarObject,
         drum: drumObject,
@@ -664,6 +710,8 @@ function iniciarMinijuego(instrumento) {
 
     const objetoInstrumento = instrumentoMap[instrumento];
     if (!objetoInstrumento) return;
+
+    let textoSprite = crearTextoFlotante(`Toca el ${instrumento.toUpperCase()} (0/5)`, objetoInstrumento);
 
     // Crear audio posicional
     const sonido = new THREE.PositionalAudio(listener);
@@ -677,21 +725,22 @@ function iniciarMinijuego(instrumento) {
         objetoInstrumento.add(sonido);
     });
 
-    // Mini lógica: tocar 5 veces con botón A para completar
-    let interacciones = 0;
-    const meta = 5;
+ 
 
     const prompt = document.getElementById('interactPrompt');
-    prompt.innerText = `Toca el ${instrumento.toUpperCase()} (${interacciones}/${meta})`;
+    //prompt.innerText = `Toca el ${instrumento.toUpperCase()} (${interacciones}/${meta})`;
 
     const intervalo = setInterval(() => {
         // Cuando se alcance la meta, finalizar
         if (interacciones >= meta) {
             sonido.stop();
             clearInterval(intervalo);
-            prompt.innerText = '';
+            objetoInstrumento.remove(textoSprite);
             desactivarInstrumento(instrumento);
+
+            minijuegoActivo = false; // ✅ Permitimos iniciar otro minijuego
         }
+
     }, 500);
 
     // Escucha botón A para contar interacciones
@@ -700,19 +749,54 @@ function iniciarMinijuego(instrumento) {
 
     function contarInteraccion() {
         interacciones++;
-        prompt.innerText = `Toca el ${instrumento.toUpperCase()} (${interacciones}/${meta})`;
+        //console.log(`Interacción registrada: ${interacciones}/${meta}`);
+        const canvas = textoSprite.material.map.image;
+        const context = canvas.getContext('2d');
+        context.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Redibujar fondo y texto
+        context.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        context.strokeStyle = 'white';
+        context.lineWidth = 4;
+        const radius = 20;
+        const w = canvas.width;
+        const h = canvas.height;
+
+        context.beginPath();
+        context.moveTo(radius, 0);
+        context.lineTo(w - radius, 0);
+        context.quadraticCurveTo(w, 0, w, radius);
+        context.lineTo(w, h - radius);
+        context.quadraticCurveTo(w, h, w - radius, h);
+        context.lineTo(radius, h);
+        context.quadraticCurveTo(0, h, 0, h - radius);
+        context.lineTo(0, radius);
+        context.quadraticCurveTo(0, 0, radius, 0);
+        context.closePath();
+        context.fill();
+        context.stroke();
+
+        context.fillStyle = 'white';
+        context.font = 'bold 40px sans-serif';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText(`Toca el ${instrumento.toUpperCase()} (${interacciones}/${meta})`, w / 2, h / 2);
+
+        textoSprite.material.map.needsUpdate = true;
     }
+
 
     function loopBotonA() {
         for (const source of session.inputSources) {
             if (source.handedness === 'right' && source.gamepad) {
                 const botonA = source.gamepad.buttons[0];
-                if (botonA.pressed && !botonAPresionado) {
-                    botonAPresionado = true;
+                if (botonA.pressed && !botonAPresionadoMinijuego) {
+                    botonAPresionadoMinijuego = true;
                     contarInteraccion();
                 } else if (!botonA.pressed) {
-                    botonAPresionado = false;
+                    botonAPresionadoMinijuego = false;
                 }
+
             }
         }
 
@@ -722,6 +806,57 @@ function iniciarMinijuego(instrumento) {
     }
 
     loopBotonA();
+}
+
+function crearTextoFlotante(mensaje, instrumentoMesh) {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 512;
+    canvas.height = 256;
+
+    // Fondo semitransparente con bordes redondeados
+    context.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    context.strokeStyle = 'white';
+    context.lineWidth = 4;
+    const radius = 20;
+    const w = canvas.width;
+    const h = canvas.height;
+
+    context.beginPath();
+    context.moveTo(radius, 0);
+    context.lineTo(w - radius, 0);
+    context.quadraticCurveTo(w, 0, w, radius);
+    context.lineTo(w, h - radius);
+    context.quadraticCurveTo(w, h, w - radius, h);
+    context.lineTo(radius, h);
+    context.quadraticCurveTo(0, h, 0, h - radius);
+    context.lineTo(0, radius);
+    context.quadraticCurveTo(0, 0, radius, 0);
+    context.closePath();
+
+    context.fill();
+    context.stroke();
+
+    // Texto
+    context.fillStyle = 'white';
+    context.font = 'bold 40px sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(mensaje, w / 2, h / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new THREE.Sprite(material);
+
+    sprite.scale.set(2, 1, 1); // tamaño del sprite
+
+    // Posicionar encima del instrumento
+    const bbox = new THREE.Box3().setFromObject(instrumentoMesh);
+    const altura = bbox.max.y - bbox.min.y;
+    sprite.position.set(0, altura + 0.5, 0);
+
+    instrumentoMesh.add(sprite);
+    return sprite;
 }
 
 
