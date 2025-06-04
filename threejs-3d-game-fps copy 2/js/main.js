@@ -24,6 +24,7 @@ const fillLight1 = new THREE.HemisphereLight(0x8dc1de, 0x00668d, 1.5);
 fillLight1.position.set(2, 1, 1);
 scene.add(fillLight1);
 
+
 const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5);
 directionalLight.position.set(10, 20, 10);
 directionalLight.castShadow = true;
@@ -304,7 +305,7 @@ function getSideVector() {
 }
 
 let botonAPresionadoGlobal = false; // para detectar inicio
-//let botonAPresionadoMinijuego = false; // para contar toques
+let botonAPresionadoMinijuego = false; // para contar toques
 
 let minijuegoActivo = false;
 
@@ -699,7 +700,7 @@ function animate() {
 
 function iniciarMinijuego(instrumento) {
     // Crear texto flotante encima del instrumento
-    let botonAPresionadoMinijuego = false;
+    //let botonAPresionadoMinijuego = false;
 
     
     const instrumentoMap = {
@@ -888,12 +889,80 @@ function desactivarInstrumento(nombreInstrumento) {
 
             if (instrumentosDesactivados === totalInstrumentos) {
                 desactivarPuerta(gltfModel); // Asegúrate de tener gltfModel disponible
+                 // Obtener la posición del jugador
+                const posicionJugador = camera.getWorldPosition(new THREE.Vector3());
+                const direccionJugador = camera.getWorldDirection(new THREE.Vector3());
+
+                const creditos = crearCreditosVR();
+                creditos.position.copy(posicionJugador).add(direccionJugador.multiplyScalar(2));
+                creditos.rotation.y = camera.rotation.y;
+
+                scene.add(creditos);
+
+                // Animar hacia arriba
+                const velocidad = 0.01;
+                const duracion = 15 * 60; // 15 segundos a 60 FPS
+                let contador = 0;
+
+                function animarCreditos() {
+                    if (contador < duracion) {
+                        creditos.position.y += velocidad;
+                        contador++;
+                        requestAnimationFrame(animarCreditos);
+                    } else {
+                        scene.remove(creditos);
+                    }
+                }
+
+                animarCreditos();
+                
             }
 
             break;
         }
     }
 }
+
+function crearCreditosVR() {
+    const grupo = new THREE.Group();
+
+    const lineas = [
+        "Desarrollado por TuNombre",
+        "Programación: TuEquipo",
+        "Música: Autor",
+        "Gracias por jugar"
+    ];
+
+    lineas.forEach((texto, i) => {
+        const sprite = crearTextoSprite(texto);
+        sprite.position.set(0, i * -1.2, 0); // Apilados hacia abajo
+        grupo.add(sprite);
+    });
+
+    return grupo;
+}
+function crearTextoSprite(mensaje) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.font = 'bold 60px sans-serif';
+    ctx.fillStyle = 'white';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(mensaje, canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(5, 1.2, 1); // Más grande que los textos flotantes normales
+    return sprite;
+}
+
 
 function desactivarPuerta(gltf) {
     const puerta = gltf.scene.getObjectByName("door");
