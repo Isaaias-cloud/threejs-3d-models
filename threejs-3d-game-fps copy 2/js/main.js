@@ -677,7 +677,7 @@ function animate() {
 }
   // Mini lógica: tocar 5 veces con botón A para completar
     let interacciones = 0;
-    const meta = 5;
+    const meta = 1;
     function contarInteraccion() {
         interacciones++;
 
