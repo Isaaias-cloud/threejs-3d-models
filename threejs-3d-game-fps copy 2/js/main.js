@@ -927,9 +927,7 @@ function crearCreditosVR() {
     const grupo = new THREE.Group();
 
     const lineas = [
-        "Desarrollado por TuNombre",
-        "Programación: TuEquipo",
-        "Música: Autor",
+        "Desarrollado por Isaaias Arrieta",
         "Gracias por jugar"
     ];
 
