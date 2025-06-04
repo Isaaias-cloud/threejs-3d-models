@@ -320,7 +320,7 @@ function detectarBotonA() {
         if (source.handedness === 'right' && source.gamepad && source.gamepad.buttons.length > 0) {
             const botonA = source.gamepad.buttons[0];
 
-            if (botonA.pressed && !botonAPresionadoGlobal) {
+            if (botonA.pressed){// && !botonAPresionadoGlobal) {
                 botonAPresionadoGlobal = true;
 
                 if (objetoInteractivoCercano && !minijuegoActivo) {  // ← ✅ aquí evitamos múltiples inicios
