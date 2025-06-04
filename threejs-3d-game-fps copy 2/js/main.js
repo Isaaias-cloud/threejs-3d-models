@@ -1009,7 +1009,7 @@ function mostrarMensajeEscape() {
     document.body.appendChild(mensajeDiv);
 
     setTimeout(() => {
-        mensajeDiv.innerText = "Presiona la tecla R para reiniciar";
+        mensajeDiv.innerText = "Gracias por jugar";
         window.addEventListener("keydown", reiniciarPagina);
     }, 3000);
 }
